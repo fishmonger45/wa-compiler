@@ -167,20 +167,17 @@ fn func_entire<'a>(input: &'a str, ctx: &mut Rc<RefCell<Ctx>>) -> IResult<&'a st
         ctx.borrow_mut().insert_func_id(Some(id.to_string()));
         let (input, f_type) = type_use(input, ctx)?;
         let (input, instrs) = instrs(input, ctx)?;
-
         let f = Func {
             f_type: f_type as i32,
             locals: vec![],
             body: instrs,
         };
-
         Ok((input, f))
     }
 
     let in_pt = |i| inner(i, ctx);
     let (input, func) = pt(in_pt)(input)?;
     ctx.borrow_mut().insert_func(&func);
-
     Ok((input, func))
 }
 
@@ -217,6 +214,7 @@ pub fn module_entire(input: &str) -> IResult<&str, Module> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctx::Field;
 
     #[test]
     fn parse_ws() {
@@ -409,5 +407,96 @@ mod tests {
                 vec![Instr::LocalGet(1), Instr::I32Add, Instr::LocalGet(2)]
             ))
         );
+    }
+
+    #[test]
+    fn parse_func_entire() {
+        let mut ctx = Rc::new(RefCell::new(Ctx::new()));
+        let wat = "(func $add (param $lhs i32) (param $rhs i32) (result i32)
+              local.get $lhs
+              local.get $rhs
+              i32.add)";
+        let expected = Func {
+            f_type: 0,
+            locals: vec![],
+            body: vec![Instr::LocalGet(0), Instr::LocalGet(1), Instr::I32Add],
+        };
+        assert_eq!(func_entire(&wat, &mut ctx), Ok(("", expected.clone())));
+        assert_eq!(
+            ctx,
+            Rc::new(RefCell::new(Ctx {
+                locals: vec![Some("$lhs".to_string()), Some("$rhs".to_string())],
+                types: Field {
+                    ids: vec![None],
+                    list: vec![(vec![ValueType::I32, ValueType::I32], vec![ValueType::I32])],
+                },
+                funcs: Field {
+                    ids: vec![Some("$add".to_string())],
+                    list: vec![expected]
+                },
+                exports: Field::new()
+            }))
+        )
+    }
+
+    #[test]
+    fn parse_export_entire() {
+        let mut ctx = Rc::new(RefCell::new(Ctx {
+            funcs: Field {
+                ids: vec![Some("$add".to_string())],
+                list: vec![],
+            },
+            ..Ctx::new()
+        }));
+        let expected = Export {
+            name: "add".to_string(),
+            e_desc: EDesc::FuncExport(0),
+        };
+        assert_eq!(
+            export_entire("(export \"add\" (func $add))", &mut ctx),
+            Ok(("", expected))
+        );
+        assert_eq!(
+            ctx,
+            Rc::new(RefCell::new(Ctx {
+                locals: vec![],
+                types: Field::new(),
+                funcs: Field {
+                    ids: vec![Some("$add".to_string())],
+                    list: vec![]
+                },
+                exports: Field {
+                    ids: vec![Some("add".to_string())],
+                    list: vec![Export {
+                        name: "add".to_string(),
+                        e_desc: EDesc::FuncExport(0)
+                    }]
+                }
+            }))
+        )
+    }
+
+    #[test]
+    fn parse_module_entire() {
+        let wat = "(module
+                (func $add (param $lhs i32) (param $rhs i32) (result i32)
+                  local.get $lhs
+                  local.get $rhs
+                  i32.add)
+                (export \"add\" (func $add))
+            )";
+        let expected = Module {
+            types: vec![(vec![ValueType::I32, ValueType::I32], vec![ValueType::I32])],
+            funcs: vec![Func {
+                f_type: 0,
+                locals: vec![],
+                body: vec![Instr::LocalGet(0), Instr::LocalGet(1), Instr::I32Add],
+            }],
+            exports: vec![Export {
+                name: "add".to_string(),
+                e_desc: EDesc::FuncExport(0),
+            }],
+        };
+        assert_eq!(module_entire(&wat), Ok(("", expected)));
     }
 }

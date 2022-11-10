@@ -1,0 +1,3 @@
+wa_compiler
+
+real basic wasm parser + compiler for a strict subset of the spec, minimally covering ops required for add.wat

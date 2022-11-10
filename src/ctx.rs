@@ -97,6 +97,7 @@ impl<T> Field<T> {
 
     pub fn add(&mut self, id: Option<String>, item: T) {
         self.list.push(item);
+        self.add_id(id);
     }
 
     pub fn add_id(&mut self, id: Option<String>) {
